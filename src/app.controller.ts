@@ -1,12 +1,18 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post, Query } from '@nestjs/common';
 import { AppService } from './app.service';
+import { ScrapingService } from './scraping/scraping.service';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(private readonly scrapService: ScrapingService) {}
 
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Post('search')
+  async search(@Query() params: { contact: string }) {
+    return params;
+  }
+
+  @Get('scrap')
+  async scrap() {
+    return this.scrapService.scrapWebsites();
   }
 }
