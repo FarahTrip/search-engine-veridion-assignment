@@ -1,31 +1,52 @@
 import { Injectable } from '@nestjs/common';
-import puppeteer from 'puppeteer';
+import * as fs from 'fs';
+import * as csvParser from 'csv-parser';
+import { CheerioCrawler, Dataset } from 'crawlee';
 
 @Injectable()
 export class ScrapingService {
+  async handleCron() {
+    console.log('Logged at ');
+  }
+
   async scrapWebsites() {
-    const browser = await puppeteer.launch({
-      headless: false,
-      userDataDir: './temp',
+    const domains = await this.readDomainsFromCSV('src/domains.csv');
+    const sample = domains.slice(-10);
+    console.log(sample);
+
+    const crawler = new CheerioCrawler({
+      async requestHandler({ request, $, enqueueLinks, log }) {
+        const title = $('title').text();
+        log.info(`Title of ${request.loadedUrl} is '${title}'`);
+
+        // Save results as JSON to ./storage/datasets/default
+        await Dataset.pushData({ title, url: request.loadedUrl });
+
+        // Extract links from the current page
+        // and add them to the crawling queue.
+        await enqueueLinks();
+      },
+      maxRequestsPerCrawl: 50,
     });
 
-    const page = await browser.newPage();
+    await crawler.run(sample);
+  }
 
-    await page.goto(
-      'https://www.emag.ro/desktop-pc/c?ref=hp_menu_quick-nav_23_1&type=category',
-    );
+  async readDomainsFromCSV(filePath: string): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+      const domains: string[] = [];
 
-    // const element = await page.waitForSelector('div > .js-products-container');
-    const element = await page.$$('#card_grid');
-
-    for (const productHandle of element) {
-      const title = await page.evaluate(() =>
-        page
-          .$$('div > div > div.card-v2-info > div > h2 > a')
-          .then((res) => console.log(res)),
-      );
-    }
-
-    browser.close();
+      fs.createReadStream(filePath)
+        .pipe(csvParser())
+        .on('data', (row: any) => {
+          domains.push(row.domain);
+        })
+        .on('end', () => {
+          resolve(domains);
+        })
+        .on('error', (error: any) => {
+          reject(error);
+        });
+    });
   }
 }
