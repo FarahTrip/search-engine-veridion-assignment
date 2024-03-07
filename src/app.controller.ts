@@ -15,4 +15,9 @@ export class AppController {
   async scrap() {
     return this.scrapService.scrapWebsites();
   }
+
+  @Get('getStatistics')
+  async getStatistics() {
+    return this.scrapService.getStatistics();
+  }
 }

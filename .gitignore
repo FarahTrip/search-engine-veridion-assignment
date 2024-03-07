@@ -4,6 +4,7 @@
 /build
 /temp
 /storage
+/data
 
 # Logs
 logs

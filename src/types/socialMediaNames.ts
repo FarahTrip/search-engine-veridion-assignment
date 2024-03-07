@@ -1,0 +1,28 @@
+const socialMediaList: string[] = [
+  'facebook.com',
+  'instagram.com',
+  'twitter.com',
+  'linkedin.com',
+  'snapchat.com',
+  'tiktok.com',
+  'youtube.com',
+  'reddit.com',
+  'pinterest.com',
+  'whatsapp.com',
+  'wechat.com',
+  'telegram.org',
+  'tumblr.com',
+  'flickr.com',
+  'vimeo.com',
+  'vk.com',
+  'weibo.com',
+  'qq.com',
+  'line.me',
+  'kakaocorp.com',
+  'medium.com',
+  'quora.com',
+  'discord.com',
+  'clubhouse.com',
+];
+
+export default socialMediaList;

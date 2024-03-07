@@ -1,35 +1,155 @@
 import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import * as csvParser from 'csv-parser';
-import { CheerioCrawler, Dataset } from 'crawlee';
+import { CheerioCrawler, RequestQueue } from 'crawlee';
+import phone from 'phone'; // Import phone library
+import { Worker } from 'worker_threads';
+import { company } from 'src/types/scrapResult';
+import { PrismaService } from 'src/prisma/prisma.service';
+import socialMediaList from 'src/types/socialMediaNames';
 
 @Injectable()
 export class ScrapingService {
-  async handleCron() {
-    console.log('Logged at ');
-  }
+  constructor(private readonly prisma: PrismaService) {}
+  private readonly filePath = './scrapResults.json';
 
   async scrapWebsites() {
     const domains = await this.readDomainsFromCSV('src/domains.csv');
-    const sample = domains.slice(-10);
-    console.log(sample);
+    const companies: company[] = domains.map((domain) => ({
+      domain,
+      emails: [],
+      phoneNumbers: [],
+      socialMediaLinks: [],
+      company_all_available_names: [],
+    }));
+
+    const requestQueue = await RequestQueue.open();
+    await Promise.all(
+      companies.map((company) =>
+        requestQueue.addRequest({
+          url: `https://${company.domain}`,
+          maxRetries: 2,
+        }),
+      ),
+    );
 
     const crawler = new CheerioCrawler({
-      async requestHandler({ request, $, enqueueLinks, log }) {
-        const title = $('title').text();
-        log.info(`Title of ${request.loadedUrl} is '${title}'`);
+      minConcurrency: 30,
+      maxRequestsPerCrawl: 5000,
+      requestHandlerTimeoutSecs: 10,
+      requestQueue,
+      handlePageFunction: async ({ $, request }) => {
+        const domain = request.url.replace('https://', '');
+        const company = companies.find((c) => c.domain === domain);
 
-        // Save results as JSON to ./storage/datasets/default
-        await Dataset.pushData({ title, url: request.loadedUrl });
+        const text = $('body').text().toLowerCase();
 
-        // Extract links from the current page
-        // and add them to the crawling queue.
-        await enqueueLinks();
+        const emails = text.match(
+          /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?\b/g,
+        );
+        const phoneNumbers = text.match(
+          /(?:\+\d{1,3}[- ]?)?\(?(?:\d{2,3})?\)?[- ]?\d{3,4}[- ]?\d{3,4}\b/g,
+        );
+        const links = $('a[href]')
+          .map((_, el) => $(el).attr('href'))
+          .get();
+
+        if (emails) {
+          company.emails.push(...new Set(emails));
+        }
+
+        if (links) {
+          const uniqueSocialMediaLinks = new Set<string>();
+          for (const link of links) {
+            if (link.toLowerCase().includes('contact')) {
+              await requestQueue.addRequest({ url: link });
+            }
+            if (
+              socialMediaList.some((social) =>
+                link.toLowerCase().includes(social.toLowerCase()),
+              )
+            ) {
+              uniqueSocialMediaLinks.add(link);
+            }
+          }
+          company.socialMediaLinks.push(...Array.from(uniqueSocialMediaLinks));
+        }
+
+        if (phoneNumbers) {
+          const uniquePhoneNumbers = new Set<string>();
+          for (const phoneNumber of phoneNumbers) {
+            const parsedPhoneNumber = phone(phoneNumber, {
+              country: null,
+              validateMobilePrefix: false,
+            });
+            if (parsedPhoneNumber.isValid) {
+              uniquePhoneNumbers.add(parsedPhoneNumber.phoneNumber);
+            }
+          }
+          company.phoneNumbers.push(...Array.from(uniquePhoneNumbers));
+        }
       },
-      maxRequestsPerCrawl: 50,
     });
 
-    await crawler.run(sample);
+    await crawler.run();
+
+    this.saveData('scrapResults.json', companies);
+  }
+
+  async getStatistics() {
+    try {
+      const rawData = fs.readFileSync(this.filePath, 'utf-8');
+      const data = JSON.parse(rawData);
+
+      let noInfoCount = 0;
+      let withInfoCount = 0;
+      let phoneCount = 0;
+      let emailCount = 0;
+      let socialMediaCount = 0;
+
+      for (const website of data) {
+        if (
+          website.emails.length === 0 &&
+          website.phoneNumbers.length === 0 &&
+          website.socialMediaLinks.length === 0
+        ) {
+          noInfoCount++;
+        } else {
+          withInfoCount++;
+        }
+
+        if (website.phoneNumbers.length > 0) {
+          phoneCount++;
+        }
+
+        if (website.emails.length > 0) {
+          emailCount++;
+        }
+
+        if (website.socialMediaLinks.length > 0) {
+          socialMediaCount++;
+        }
+      }
+
+      return {
+        noInfoCount,
+        withInfoCount,
+        phoneCount,
+        emailCount,
+        socialMediaCount,
+      };
+    } catch (error) {
+      throw new Error(`Error reading file: ${error.message}`);
+    }
+  }
+
+  saveData(filePath: string, data: any) {
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+      console.log('Data saved successfully.');
+    } catch (error) {
+      console.error('Error saving data:', error);
+    }
   }
 
   async readDomainsFromCSV(filePath: string): Promise<string[]> {
