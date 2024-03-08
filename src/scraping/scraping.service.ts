@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import * as csvParser from 'csv-parser';
 import { CheerioCrawler, RequestQueue } from 'crawlee';
-import phone from 'phone'; // Import phone library
-import { Worker } from 'worker_threads';
+import phone from 'phone';
 import { company } from 'src/types/scrapResult';
 import { PrismaService } from 'src/prisma/prisma.service';
 import socialMediaList from 'src/types/socialMediaNames';
+import * as results from 'scrapResults.json';
 
 @Injectable()
 export class ScrapingService {
@@ -96,6 +96,24 @@ export class ScrapingService {
     this.saveData('scrapResults.json', companies);
   }
 
+  async mergeTheData() {
+    const csvPath = 'src/company-names.csv';
+    const companyNames = await readCSV(csvPath);
+
+    const mergedArray: company[] = companyNames.map((company: any) => {
+      const matchingItem = results.find(
+        (namesData) => namesData.domain === company.domain,
+      );
+
+      matchingItem.company_all_available_names =
+        company.company_all_available_names.split('|');
+
+      return { ...company, ...matchingItem };
+    });
+
+    this.saveData('seed.json', mergedArray);
+  }
+
   async getStatistics() {
     try {
       const rawData = fs.readFileSync(this.filePath, 'utf-8');
@@ -168,5 +186,32 @@ export class ScrapingService {
           reject(error);
         });
     });
+  }
+}
+
+async function readCSV(filePath) {
+  return new Promise<any[]>((resolve, reject) => {
+    const data = [];
+
+    fs.createReadStream(filePath)
+      .pipe(csvParser())
+      .on('data', (row) => {
+        data.push(row);
+      })
+      .on('end', () => {
+        resolve(data);
+      })
+      .on('error', (error) => {
+        reject(error);
+      });
+  });
+}
+
+async function displayCSV(filePath) {
+  try {
+    const rows = await readCSV(filePath);
+    console.log(rows);
+  } catch (error) {
+    console.error('Error reading CSV:', error);
   }
 }

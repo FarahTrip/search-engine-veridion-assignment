@@ -20,4 +20,9 @@ export class AppController {
   async getStatistics() {
     return this.scrapService.getStatistics();
   }
+
+  @Get('mergeTheData')
+  async mergeTheData() {
+    return this.scrapService.mergeTheData();
+  }
 }

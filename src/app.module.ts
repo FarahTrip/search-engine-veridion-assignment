@@ -6,9 +6,10 @@ import { ScrapingService } from './scraping/scraping.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaService } from './prisma/prisma.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { CompanyModule } from './company/company.module';
 
 @Module({
-  imports: [ScrapingModule, ScrapingModule, ScheduleModule.forRoot(), PrismaModule],
+  imports: [ScrapingModule, ScrapingModule, ScheduleModule.forRoot(), PrismaModule, CompanyModule],
   controllers: [AppController],
   providers: [AppService, ScrapingService, PrismaService],
 })

@@ -13,7 +13,6 @@ model company {
   emails                      String[]
   phoneNumbers                String[]
   socialMediaLinks            String[]
-  adress                      String[]
   company_commercial_name     String
   company_legal_name          String
   company_all_available_names String[]
